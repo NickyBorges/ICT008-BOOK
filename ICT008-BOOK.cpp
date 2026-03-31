@@ -6,11 +6,11 @@
 #include <ctime>
 using namespace std;
 
-// =====================
-//      BOOK CLASS
-// =====================
+// ==================================================
+//                BASE CLASS: BOOK
+// ==================================================
 class Book {
-private:
+protected:
     string title;
     string author;
     string isbn;
@@ -22,24 +22,14 @@ private:
     chrono::system_clock::time_point dueDate;
 
 public:
-    Book() {
-        title = "";
-        author = "";
-        isbn = "";
-        availability = true;
-        dateAdd = "";
-        isBorrowed = false;
+    Book(string t, string a, string i, bool avail, string date)
+        : title(t), author(a), isbn(i), availability(avail),
+        dateAdd(date), isBorrowed(false) {
     }
 
-    void setBookDetails(string t, string a, string i, bool avail, string date) {
-        title = t;
-        author = a;
-        isbn = i;
-        availability = avail;
-        dateAdd = date;
-    }
+    virtual ~Book() {}
 
-    void displayBookDetails() {
+    virtual void displayBookDetails() {
         cout << "----------------------------------" << endl;
         cout << "Title: " << title << endl;
         cout << "Author: " << author << endl;
@@ -51,10 +41,10 @@ public:
             time_t due = chrono::system_clock::to_time_t(dueDate);
             cout << "Due Date: " << ctime(&due);
         }
-
         cout << "----------------------------------" << endl;
     }
 
+    // SAME BORROW LOGIC AS PHASE 1
     bool borrowBook() {
         if (availability) {
             availability = false;
@@ -93,7 +83,6 @@ public:
             else {
                 fineOut = 0.0;
             }
-
             return true;
         }
         return false;
@@ -103,11 +92,11 @@ public:
     string getTitle() { return title; }
     bool isAvailable() { return availability; }
 
-    static void sortBookData(Book books[], int size) {
+    static void sortBookData(Book* books[], int size) {
         for (int i = 0; i < size - 1; i++) {
             for (int j = 0; j < size - i - 1; j++) {
-                if (books[j].isbn > books[j + 1].isbn) {
-                    Book temp = books[j];
+                if (books[j]->isbn > books[j + 1]->isbn) {
+                    Book* temp = books[j];
                     books[j] = books[j + 1];
                     books[j + 1] = temp;
                 }
@@ -116,18 +105,57 @@ public:
     }
 };
 
-// =====================
-//     MAIN PROGRAM
-// =====================
+// ==================================================
+//           DERIVED CLASS: HARDCOPY BOOK
+// ==================================================
+class HardcopyBook : public Book {
+private:
+    string shelfNumber;
+
+public:
+    HardcopyBook(string t, string a, string i, bool avail, string date, string shelf)
+        : Book(t, a, i, avail, date), shelfNumber(shelf) {
+    }
+
+    void displayBookDetails() override {
+        Book::displayBookDetails();
+        cout << "Shelf Number: " << shelfNumber << endl;
+        cout << "----------------------------------" << endl;
+    }
+};
+
+// ==================================================
+//             DERIVED CLASS: EBOOK
+// ==================================================
+class EBook : public Book {
+private:
+    string licenseEndDate;
+
+public:
+    EBook(string t, string a, string i, bool avail, string date, string licenseEnd)
+        : Book(t, a, i, avail, date), licenseEndDate(licenseEnd) {
+    }
+
+    void displayBookDetails() override {
+        Book::displayBookDetails();
+        cout << "License End Date: " << licenseEndDate << endl;
+        cout << "----------------------------------" << endl;
+    }
+};
+
+// ==================================================
+//                  MAIN PROGRAM
+// ==================================================
 int main() {
     const int SIZE = 5;
-    Book books[SIZE];
+    Book* books[SIZE];
 
-    books[0].setBookDetails("The Lightning Thief", "Rick Riordan", "1111", true, "2005");
-    books[1].setBookDetails("The Hunger Games", "Suzanne Collins", "2222", true, "2008");
-    books[2].setBookDetails("The Lion, the Witch and the Wardrobe", "C.S. Lewis", "3333", true, "1950");
-    books[3].setBookDetails("City of Bones", "Cassandra Clare", "4444", true, "2007");
-    books[4].setBookDetails("A Deadly Education", "Naomi Novik", "5555", true, "2020");
+    // Create HARD COPY and EBOOK objects
+    books[0] = new HardcopyBook("The Lightning Thief", "Rick Riordan", "1111", true, "2005", "A-10");
+    books[1] = new HardcopyBook("The Hunger Games", "Suzanne Collins", "2222", true, "2008", "B-07");
+    books[2] = new HardcopyBook("The Lion, the Witch and the Wardrobe", "C.S. Lewis", "3333", true, "1950", "C-01");
+    books[3] = new HardcopyBook("City of Bones", "Cassandra Clare", "4444", true, "2007", "D-05");
+    books[4] = new EBook("A Deadly Education", "Naomi Novik", "5555", true, "2020", "2028-12-31");
 
     Book::sortBookData(books, SIZE);
 
@@ -146,25 +174,24 @@ int main() {
         cin >> choice;
         cin.ignore();
 
-        // EXIT PROGRAM
+        // EXIT
         if (choice == 5) {
             cout << "Program terminated." << endl;
             break;
         }
 
-        // SEE AVAILABLE
+        // AVAILABLE BOOKS
         if (choice == 2) {
             cout << "\n===== AVAILABLE BOOKS =====\n";
             bool any = false;
 
             for (int i = 0; i < SIZE; i++) {
-                if (books[i].isAvailable()) {
-                    books[i].displayBookDetails();
+                if (books[i]->isAvailable()) {
+                    books[i]->displayBookDetails();
                     any = true;
                 }
             }
-
-            if (!any) cout << "No books available.\n";
+            if (!any) cout << "No available books.\n";
             continue;
         }
 
@@ -180,30 +207,28 @@ int main() {
             bool found = false;
 
             for (int i = 0; i < SIZE; i++) {
-                string loweredTitle = books[i].getTitle();
+                string loweredTitle = books[i]->getTitle();
                 transform(loweredTitle.begin(), loweredTitle.end(), loweredTitle.begin(), ::tolower);
 
-                bool matchISBN = books[i].getISBN() == input;
+                bool matchISBN = books[i]->getISBN() == input;
                 bool matchTitleExact = loweredTitle == loweredInput;
                 bool matchTitlePartial = loweredTitle.find(loweredInput) != string::npos;
 
                 if (matchISBN || matchTitleExact || matchTitlePartial) {
                     found = true;
 
-                    books[i].displayBookDetails();
+                    books[i]->displayBookDetails();
 
                     cout << "Confirm borrow? (y/n): ";
-                    char confirm;
-                    cin >> confirm;
+                    char c;
+                    cin >> c;
                     cin.ignore();
 
-                    if (confirm == 'y' || confirm == 'Y') {
-                        if (books[i].borrowBook()) {
-                            cout << "Book borrowed! Due date assigned.\n";
-                        }
-                        else {
-                            cout << "Book is unavailable.\n";
-                        }
+                    if (c == 'y' || c == 'Y') {
+                        if (books[i]->borrowBook())
+                            cout << "Book borrowed successfully!\n";
+                        else
+                            cout << "This book is unavailable.\n";
                     }
                     else {
                         cout << "Borrow cancelled.\n";
@@ -225,7 +250,7 @@ int main() {
             bool found = false;
 
             for (int i = 0; i < SIZE; i++) {
-                if (books[i].getISBN() == input) {
+                if (books[i]->getISBN() == input) {
                     found = true;
 
                     cout << "Confirm return? (y/n): ";
@@ -235,17 +260,16 @@ int main() {
 
                     if (c == 'y' || c == 'Y') {
                         double fine = 0;
-                        books[i].returnBook(fine);
+                        books[i]->returnBook(fine);
 
                         if (fine == 0)
-                            cout << "Thank you! Book returned on time.\n";
+                            cout << "Book returned on time.\n";
                         else
                             cout << "Returned late. Fine: $" << fine << endl;
                     }
                     else {
                         cout << "Return cancelled.\n";
                     }
-
                     break;
                 }
             }
@@ -254,15 +278,14 @@ int main() {
             continue;
         }
 
-        // SHOW BORROWED BOOKS
+        // BORROWED BOOKS
         if (choice == 4) {
             cout << "\n===== BORROWED BOOKS =====\n";
-
             bool any = false;
 
             for (int i = 0; i < SIZE; i++) {
-                if (!books[i].isAvailable()) {
-                    books[i].displayBookDetails();
+                if (!books[i]->isAvailable()) {
+                    books[i]->displayBookDetails();
                     any = true;
                 }
             }
@@ -273,9 +296,12 @@ int main() {
             continue;
         }
 
-        cout << "\nInvalid option.\n";
+        cout << "Invalid option.\n";
     }
+
+    // CLEAN-UP MEMORY
+    for (int i = 0; i < SIZE; i++)
+        delete books[i];
 
     return 0;
 }
-
