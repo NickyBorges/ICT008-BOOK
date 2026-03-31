@@ -1,9 +1,12 @@
-// ICT008-BOOK.cpp : This file contains the 'main' function. Program execution begins and ends there.
-//
+
+
+#define _CRT_SECURE_NO_WARNINGS
 
 #include <iostream>
 #include <string>
 #include <algorithm>
+#include <chrono>
+#include <ctime>
 using namespace std;
 
 // =====================
@@ -17,6 +20,10 @@ private:
     bool availability;
     string dateAdd;
 
+    bool isBorrowed;
+    chrono::system_clock::time_point borrowDate;
+    chrono::system_clock::time_point dueDate;
+
 public:
     Book() {
         title = "";
@@ -24,6 +31,7 @@ public:
         isbn = "";
         availability = true;
         dateAdd = "";
+        isBorrowed = false;
     }
 
     void setBookDetails(string t, string a, string i, bool avail, string date) {
@@ -41,18 +49,63 @@ public:
         cout << "ISBN: " << isbn << endl;
         cout << "Availability: " << (availability ? "Available" : "Borrowed") << endl;
         cout << "Date Added: " << dateAdd << endl;
+
+        if (!availability) {
+            time_t due = chrono::system_clock::to_time_t(dueDate);
+            cout << "Due Date: " << ctime(&due);
+        }
+
         cout << "----------------------------------" << endl;
     }
 
     bool borrowBook() {
         if (availability) {
             availability = false;
+            isBorrowed = true;
+
+            // Borrow today
+            borrowDate = chrono::system_clock::now();
+
+            // +10 days
+            dueDate = borrowDate + chrono::hours(24 * 10);
+
+            // Weekend adjustment
+            time_t raw = chrono::system_clock::to_time_t(dueDate);
+            tm* d = localtime(&raw);
+
+            if (d->tm_wday == 6) { // Saturday
+                dueDate += chrono::hours(48);
+            }
+            else if (d->tm_wday == 0) { // Sunday
+                dueDate += chrono::hours(24);
+            }
+
             return true;
         }
         return false;
     }
 
-    void returnBook() { availability = true; }
+    // Return logic with fine
+    bool returnBook(double& fineOut) {
+        if (!availability) {
+            availability = true;
+            isBorrowed = false;
+
+            auto now = chrono::system_clock::now();
+
+            if (now > dueDate) {
+                auto lateHours = chrono::duration_cast<chrono::hours>(now - dueDate).count();
+                int lateDays = lateHours / 24;
+                fineOut = lateDays * 0.30;
+            }
+            else {
+                fineOut = 0.0;
+            }
+
+            return true;
+        }
+        return false;
+    }
 
     string getISBN() { return isbn; }
     string getTitle() { return title; }
@@ -79,14 +132,11 @@ int main() {
     const int SIZE = 5;
     Book books[SIZE];
 
-    // Initialise books
-
     books[0].setBookDetails("The Lightning Thief", "Rick Riordan", "1111", true, "2005");
     books[1].setBookDetails("The Hunger Games", "Suzanne Collins", "2222", true, "2008");
     books[2].setBookDetails("The Lion, the Witch and the Wardrobe", "C.S. Lewis", "3333", true, "1950");
     books[3].setBookDetails("City of Bones", "Cassandra Clare", "4444", true, "2007");
     books[4].setBookDetails("A Deadly Education", "Naomi Novik", "5555", true, "2020");
-
 
     Book::sortBookData(books, SIZE);
 
@@ -94,95 +144,121 @@ int main() {
     string input;
 
     while (true) {
-
-        // ========== MENU ==========
         cout << "\n===== LIBRARY MENU =====" << endl;
-        cout << "1. Borrow a Book (by ISBN or Title)" << endl;
+        cout << "1. Borrow a Book" << endl;
         cout << "2. See Available Books" << endl;
         cout << "3. Exit Program" << endl;
+        cout << "4. Return a Book" << endl;
         cout << "Choose an option: ";
         cin >> choice;
-        cin.ignore(); // Fix getline bug
+        cin.ignore();
 
-        // ========== OPTION 3: EXIT ==========
         if (choice == 3) {
             cout << "Program terminated." << endl;
             break;
         }
 
-        // ========== OPTION 2: SHOW AVAILABLE BOOKS ==========
+        // SHOW AVAILABLE
         if (choice == 2) {
             cout << "\n===== AVAILABLE BOOKS =====\n";
-            bool anyAvailable = false;
-
+            bool any = false;
             for (int i = 0; i < SIZE; i++) {
                 if (books[i].isAvailable()) {
                     books[i].displayBookDetails();
-                    anyAvailable = true;
+                    any = true;
                 }
             }
-
-            if (!anyAvailable) {
-                cout << "No books available right now.\n";
-            }
+            if (!any) cout << "No books available.\n";
             continue;
         }
 
-        // ========== OPTION 1: BORROW ==========
+        // BORROW
         if (choice == 1) {
-            cout << "\nEnter ISBN or Title (or type 0 to cancel): ";
+            cout << "\nEnter ISBN or Title (or 0 to cancel): ";
             getline(cin, input);
+            if (input == "0") continue;
 
-            if (input == "0") {
-                cout << "Borrow cancelled.\n";
-                continue;
-            }
-
-            // Case-insensitive matching
             string loweredInput = input;
             transform(loweredInput.begin(), loweredInput.end(), loweredInput.begin(), ::tolower);
 
             bool found = false;
 
             for (int i = 0; i < SIZE; i++) {
-
                 string loweredTitle = books[i].getTitle();
                 transform(loweredTitle.begin(), loweredTitle.end(), loweredTitle.begin(), ::tolower);
 
-                // MATCH BY ISBN OR TITLE
-                if (books[i].getISBN() == input || loweredTitle == loweredInput) {
+                bool matchISBN = books[i].getISBN() == input;
+                bool matchTitleExact = loweredTitle == loweredInput;
+                bool matchTitlePartial = loweredTitle.find(loweredInput) != string::npos;
+
+                if (matchISBN || matchTitleExact || matchTitlePartial) {
                     found = true;
 
-                    if (books[i].isAvailable()) {
-                        books[i].borrowBook();
-                        cout << "\nBook Borrowed Successfully!\n";
-                        books[i].displayBookDetails();
+                    books[i].displayBookDetails();
+
+                    cout << "Confirm borrow? (y/n): ";
+                    char confirm;
+                    cin >> confirm;
+                    cin.ignore();
+
+                    if (confirm == 'y' || confirm == 'Y') {
+                        if (books[i].borrowBook()) {
+                            cout << "Book borrowed! Due date assigned.\n";
+                        }
+                        else {
+                            cout << "Book is unavailable.\n";
+                        }
                     }
                     else {
-                        cout << "\nThis book is currently unavailable! \n";
+                        cout << "Borrow cancelled.\n";
                     }
+
                     break;
                 }
             }
 
-            if (!found)
-                cout << "\nBook not found. Please try again.\n";
-
+            if (!found) cout << "Book not found.\n";
             continue;
         }
 
-        // ========== INVALID OPTION ==========
-        cout << "\nInvalid option. Please choose 1, 2, or 3.\n";
+        // RETURN BOOK
+        if (choice == 4) {
+            cout << "\nEnter ISBN to return: ";
+            getline(cin, input);
+
+            bool found = false;
+            for (int i = 0; i < SIZE; i++) {
+                if (books[i].getISBN() == input) {
+                    found = true;
+
+                    cout << "Confirm return? (y/n): ";
+                    char c;
+                    cin >> c;
+                    cin.ignore();
+
+                    if (c == 'y' || c == 'Y') {
+                        double fine = 0;
+                        books[i].returnBook(fine);
+
+                        if (fine == 0)
+                            cout << "Thank you! Book returned on time.\n";
+                        else
+                            cout << "Returned late. Fine: $" << fine << endl;
+                    }
+                    else {
+                        cout << "Return cancelled.\n";
+                    }
+
+                    break;
+                }
+            }
+
+            if (!found) cout << "Book not found.\n";
+            continue;
+        }
+
+        cout << "\nInvalid option.\n";
     }
+
     return 0;
 }
-// Run program: Ctrl + F5 or Debug > Start Without Debugging menu
-// Debug program: F5 or Debug > Start Debugging menu
-
-// Tips for Getting Started: 
-//   1. Use the Solution Explorer window to add/manage files
-//   2. Use the Team Explorer window to connect to source control
-//   3. Use the Output window to see build output and other messages
-//   4. Use the Error List window to view errors
-//   5. Go to Project > Add New Item to create new code files, or Project > Add Existing Item to add existing code files to the project
-//   6. In the future, to open this project again, go to File > Open > Project and select the .sln file
