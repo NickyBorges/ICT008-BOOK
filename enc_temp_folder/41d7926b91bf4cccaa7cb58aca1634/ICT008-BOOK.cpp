@@ -187,7 +187,7 @@ int main() {
                 bool matchTitleExact = loweredTitle == loweredInput;
                 bool matchTitlePartial = loweredTitle.find(loweredInput) != string::npos;
 
-                if (matchISBN || matchTitleExact || matchTitlePartial) {
+                if ((matchISBN || matchTitleExact || matchTitlePartial) && books[i].isAvailable) {
                     found = true;
 
                     books[i].displayBookDetails();
